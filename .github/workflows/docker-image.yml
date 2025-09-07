@@ -1,116 +1,159 @@
-name: Build and Push Docker Image
+name: Docker Build and Push
 
 on:
   push:
     branches:
-      - development
-    paths-ignore:
-      - '**.md'
-      - '.gitignore'
+      - main
+      - master
   workflow_dispatch:
     inputs:
-      tag_name:
-        description: "Custom tag name for the Docker image"
-        required: false
-        default: ""
+      version:
+        description: '版本号 (例如: v1.0.0)'
+        required: true
+        type: string
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  build:
+  build-and-push:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+      
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
+      - name: Extract version from commit message or input
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            # 手动触发时使用输入的版本号
+            VERSION="${{ github.event.inputs.version }}"
+            echo "从手动输入获取版本号: $VERSION"
+          else
+            # 从最新的 commit message 中提取版本号
+            COMMIT_MSG=$(git log -1 --pretty=%B)
+            echo "Commit message: $COMMIT_MSG"
+            
+            # 使用正则表达式提取版本号 (支持 v1.0.0, 1.0.0 等格式)
+            VERSION=$(echo "$COMMIT_MSG" | grep -oE 'v?[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?' | head -n1)
+            
+            if [ -z "$VERSION" ]; then
+              echo "在 commit message 中未找到版本号，跳过构建"
+              echo "skip=true" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+            
+            echo "从 commit message 提取版本号: $VERSION"
+          fi
+          
+          # 确保版本号以 v 开头
+          if [[ ! $VERSION =~ ^v ]]; then
+            VERSION="v$VERSION"
+          fi
+          
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "skip=false" >> $GITHUB_OUTPUT
+
+      - name: Skip if no version found
+        if: steps.version.outputs.skip == 'true'
+        run: |
+          echo "未找到版本号，跳过后续步骤"
+          exit 0
 
       - name: Set up Docker Buildx
+        if: steps.version.outputs.skip != 'true'
         uses: docker/setup-buildx-action@v3
-        with:
-          platforms: linux/amd64,linux/arm64
-          driver-opts: |
-            image=moby/buildkit:master
-            network=host
 
-      - name: Cache npm dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.npm
-            node_modules
-            */*/node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
-
-      - name: Cache Docker layers
-        uses: actions/cache@v4
-        with:
-          path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-buildx-${{ github.ref_name }}-${{ hashFiles('docker/Dockerfile') }}
-          restore-keys: |
-            ${{ runner.os }}-buildx-${{ github.ref_name }}-
-            ${{ runner.os }}-buildx-
-
-      - name: Login to Docker Registry
+      - name: Log in to Container Registry
+        if: steps.version.outputs.skip != 'true'
         uses: docker/login-action@v3
         with:
-          registry: ghcr.io
+          registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Determine Docker image tag
-        run: |
-          echo "REPO_OWNER=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
-          if [ "${{ github.event.inputs.tag_name }}" != "" ]; then
-            IMAGE_TAG="${{ github.event.inputs.tag_name }}"
-          elif [ "${{ github.ref }}" == "refs/heads/main" ]; then
-            IMAGE_TAG="latest"
-          elif [ "${{ github.ref }}" == "refs/heads/development" ]; then
-            IMAGE_TAG="development-latest"
-          else
-            IMAGE_TAG="${{ github.ref_name }}"
-          fi
-          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
+      - name: Extract metadata
+        if: steps.version.outputs.skip != 'true'
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ steps.version.outputs.version }}
+            type=raw,value=latest
+          labels: |
+            org.opencontainers.image.title=${{ github.repository }}
+            org.opencontainers.image.description=Multi-platform Docker image
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created={{date 'iso8601'}}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.url=${{ github.server_url }}/${{ github.repository }}
 
-      - name: Build and Push Multi-Arch Docker Image
-        uses: docker/build-push-action@v6
+      - name: Build and push Docker image
+        if: steps.version.outputs.skip != 'true'
+        uses: docker/build-push-action@v5
         with:
           context: .
           file: ./docker/Dockerfile
-          push: true
           platforms: linux/amd64,linux/arm64
-          tags: ghcr.io/${{ env.REPO_OWNER }}/termix:${{ env.IMAGE_TAG }}
-          labels: |
-            org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           build-args: |
-            BUILDKIT_INLINE_CACHE=1
-            BUILDKIT_CONTEXT_KEEP_GIT_DIR=1
-          outputs: type=registry,compression=zstd,compression-level=19
+            VERSION=${{ steps.version.outputs.version }}
 
-      - name: Move cache
+      - name: Read changelog
+        if: steps.version.outputs.skip != 'true'
+        id: changelog
         run: |
-          rm -rf /tmp/.buildx-cache
-          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+          if [ -f "changelog.md" ]; then
+            echo "找到 changelog.md 文件"
+            # 读取 changelog 内容并处理多行文本
+            {
+              echo 'content<<EOF'
+              cat changelog.md
+              echo EOF
+            } >> $GITHUB_OUTPUT
+          elif [ -f "CHANGELOG.md" ]; then
+            echo "找到 CHANGELOG.md 文件"
+            {
+              echo 'content<<EOF'
+              cat CHANGELOG.md
+              echo EOF
+            } >> $GITHUB_OUTPUT
+          else
+            echo "未找到 changelog 文件"
+            echo 'content=' >> $GITHUB_OUTPUT
+          fi
 
-      - name: Delete all untagged image versions
-        if: success()
-        uses: quartx-analytics/ghcr-cleaner@v1
+      - name: Create Release
+        if: steps.version.outputs.skip != 'true'
+        uses: softprops/action-gh-release@v1
         with:
-          owner-type: user
-          token: ${{ secrets.GHCR_TOKEN }}
-          repository-owner: ${{ github.repository_owner }}
-          delete-untagged: true
+          tag_name: ${{ steps.version.outputs.version }}
+          name: Release ${{ steps.version.outputs.version }}
+          body: ${{ steps.changelog.outputs.content }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Cleanup Docker Images Locally
-        if: always()
+      - name: Output summary
+        if: steps.version.outputs.skip != 'true'
         run: |
-          docker image prune -af
-          docker system prune -af --volumes
+          echo "## 🚀 构建完成!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**版本号:** ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**镜像地址:** ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "**支持平台:** linux/amd64, linux/arm64" >> $GITHUB_STEP_SUMMARY
+          echo "**Release:** [${{ steps.version.outputs.version }}](${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.version.outputs.version }})" >> $GITHUB_STEP_SUMMARY

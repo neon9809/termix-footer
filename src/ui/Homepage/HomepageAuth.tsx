@@ -83,6 +83,9 @@ export function HomepageAuth({
     const [totpTempToken, setTotpTempToken] = useState("");
     const [totpLoading, setTotpLoading] = useState(false);
 
+    // 新增状态用于存储footer内容
+    const [footerContent, setFooterContent] = useState<string>("");
+
     useEffect(() => {
         setInternalLoggedIn(loggedIn);
     }, [loggedIn]);
@@ -122,6 +125,24 @@ export function HomepageAuth({
             setDbError(t('errors.databaseConnection'));
         });
     }, [setDbError]);
+
+    // 新增useEffect用于加载footer内容
+    useEffect(() => {
+        const loadFooterContent = async () => {
+            try {
+                const response = await fetch('/footer.html');
+                if (response.ok) {
+                    const content = await response.text();
+                    setFooterContent(content);
+                }
+            } catch (error) {
+                // 如果footer.html不存在或无法加载，不显示错误，只是不显示footer
+                console.log('Footer.html not found or could not be loaded');
+            }
+        };
+
+        loadFooterContent();
+    }, []);
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
@@ -403,399 +424,400 @@ export function HomepageAuth({
     );
 
     return (
-        <div
-            className={`w-[420px] max-w-full p-6 flex flex-col bg-[#18181b] border-2 border-[#303032] rounded-md ${className || ''}`}
-            {...props}
-        >
-            {dbError && (
-                <Alert variant="destructive" className="mb-4">
-                    <AlertTitle>Error</AlertTitle>
-                    <AlertDescription>{dbError}</AlertDescription>
-                </Alert>
-            )}
-            {firstUser && !dbError && !internalLoggedIn && (
-                <Alert variant="default" className="mb-4">
-                    <AlertTitle>{t('auth.firstUser')}</AlertTitle>
-                    <AlertDescription className="inline">
-                        {t('auth.firstUserMessage')}{" "}
-                        <a
-                            href="https://github.com/LukeGus/Termix/issues/new"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-600 underline hover:text-blue-800 inline"
+        <div className="flex flex-col items-center">
+            <div
+                className={`w-[420px] max-w-full p-6 flex flex-col bg-[#18181b] border-2 border-[#303032] rounded-md ${className || ''}`}
+                {...props}
+            >
+                {dbError && (
+                    <Alert variant="destructive" className="mb-4">
+                        <AlertTitle>Error</AlertTitle>
+                        <AlertDescription>{dbError}</AlertDescription>
+                    </Alert>
+                )}
+                {firstUser && !dbError && !internalLoggedIn && (
+                    <Alert variant="default" className="mb-4">
+                        <AlertTitle>{t('auth.firstUser')}</AlertTitle>
+                        <AlertDescription className="inline">
+                            {t('auth.firstUserMessage')}{" "}
+                            <a
+                                href="https://github.com/LukeGus/Termix/issues/new"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-600 underline hover:text-blue-800 inline"
+                            >
+                                GitHub Issue
+                            </a>.
+                        </AlertDescription>
+                    </Alert>
+                )}
+                {!registrationAllowed && !internalLoggedIn && (
+                    <Alert variant="destructive" className="mb-4">
+                        <AlertTitle>{t('auth.registerTitle')}</AlertTitle>
+                        <AlertDescription>
+                            {t('messages.registrationDisabled')}
+                        </AlertDescription>
+                    </Alert>
+                )}
+                {totpRequired && (
+                    <div className="flex flex-col gap-5">
+                        <div className="mb-6 text-center">
+                            <h2 className="text-xl font-bold mb-1">{t('auth.twoFactorAuth')}</h2>
+                            <p className="text-muted-foreground">{t('auth.enterCode')}</p>
+                        </div>
+                        
+                        <div className="flex flex-col gap-2">
+                            <Label htmlFor="totp-code">{t('auth.verifyCode')}</Label>
+                            <Input
+                                id="totp-code"
+                                type="text"
+                                placeholder="000000"
+                                maxLength={6}
+                                value={totpCode}
+                                onChange={e => setTotpCode(e.target.value.replace(/\D/g, ''))}
+                                disabled={totpLoading}
+                                className="h-11 text-base text-center text-lg tracking-widest"
+                            />
+                        </div>
+                        
+                        <Button
+                            type="button"
+                            className="w-full h-11 text-base font-semibold"
+                            disabled={totpLoading || totpCode.length !== 6}
+                            onClick={handleTOTPVerification}
                         >
-                            GitHub Issue
-                        </a>.
-                    </AlertDescription>
-                </Alert>
-            )}
-            {!registrationAllowed && !internalLoggedIn && (
-                <Alert variant="destructive" className="mb-4">
-                    <AlertTitle>{t('auth.registerTitle')}</AlertTitle>
-                    <AlertDescription>
-                        {t('messages.registrationDisabled')}
-                    </AlertDescription>
-                </Alert>
-            )}
-            {totpRequired && (
-                <div className="flex flex-col gap-5">
-                    <div className="mb-6 text-center">
-                        <h2 className="text-xl font-bold mb-1">{t('auth.twoFactorAuth')}</h2>
-                        <p className="text-muted-foreground">{t('auth.enterCode')}</p>
-                    </div>
-                    
-                    <div className="flex flex-col gap-2">
-                        <Label htmlFor="totp-code">{t('auth.verifyCode')}</Label>
-                        <Input
-                            id="totp-code"
-                            type="text"
-                            placeholder="000000"
-                            maxLength={6}
-                            value={totpCode}
-                            onChange={e => setTotpCode(e.target.value.replace(/\D/g, ''))}
+                            {totpLoading ? Spinner : t('auth.verifyButton')}
+                        </Button>
+                        
+                        <Button
+                            type="button"
+                            variant="outline"
+                            className="w-full h-11 text-base font-semibold"
                             disabled={totpLoading}
-                            className="text-center text-2xl tracking-widest font-mono"
-                            autoComplete="one-time-code"
-                        />
-                        <p className="text-xs text-muted-foreground text-center">
-                            {t('auth.backupCode')}
-                        </p>
+                            onClick={() => {
+                                setTotpRequired(false);
+                                setTotpCode("");
+                                setTotpTempToken("");
+                                setError(null);
+                            }}
+                        >
+                            {t('common.back')}
+                        </Button>
                     </div>
-                    
-                    <Button
-                        type="button"
-                        className="w-full h-11 text-base font-semibold"
-                        disabled={totpLoading || totpCode.length < 6}
-                        onClick={handleTOTPVerification}
-                    >
-                        {totpLoading ? Spinner : t('auth.verifyCode')}
-                    </Button>
-                    
-                    <Button
-                        type="button"
-                        variant="outline"
-                        className="w-full h-11 text-base font-semibold"
-                        disabled={totpLoading}
-                        onClick={() => {
-                            setTotpRequired(false);
-                            setTotpCode("");
-                            setTotpTempToken("");
-                            setError(null);
-                        }}
-                    >
-                        {t('common.cancel')}
-                    </Button>
-                </div>
-            )}
-            
-            {(!internalLoggedIn && (!authLoading || !getCookie("jwt")) && !totpRequired) && (
-                <>
-                    <div className="flex gap-2 mb-6">
-                        <button
-                            type="button"
-                            className={cn(
-                                "flex-1 py-2 text-base font-medium rounded-md transition-all",
-                                tab === "login"
-                                    ? "bg-primary text-primary-foreground shadow"
-                                    : "bg-muted text-muted-foreground hover:bg-accent"
-                            )}
-                            onClick={() => {
-                                setTab("login");
-                                if (tab === "reset") resetPasswordState();
-                                if (tab === "signup") clearFormFields();
-                            }}
-                            aria-selected={tab === "login"}
-                            disabled={loading || firstUser}
-                        >
-                            {t('common.login')}
-                        </button>
-                        <button
-                            type="button"
-                            className={cn(
-                                "flex-1 py-2 text-base font-medium rounded-md transition-all",
-                                tab === "signup"
-                                    ? "bg-primary text-primary-foreground shadow"
-                                    : "bg-muted text-muted-foreground hover:bg-accent"
-                            )}
-                            onClick={() => {
-                                setTab("signup");
-                                if (tab === "reset") resetPasswordState();
-                                if (tab === "login") clearFormFields();
-                            }}
-                            aria-selected={tab === "signup"}
-                            disabled={loading || !registrationAllowed}
-                        >
-                            {t('common.register')}
-                        </button>
-                        {oidcConfigured && (
+                )}
+                {!totpRequired && !internalLoggedIn && (
+                    <>
+                        <div className="flex items-center justify-between mb-6">
+                            <h1 className="text-2xl font-bold">Termix</h1>
+                            <LanguageSwitcher/>
+                        </div>
+                        {error && (
+                            <Alert variant="destructive" className="mb-4">
+                                <AlertTitle>Error</AlertTitle>
+                                <AlertDescription>{error}</AlertDescription>
+                            </Alert>
+                        )}
+                        <div className="flex bg-muted rounded-lg p-1 mb-6">
                             <button
                                 type="button"
                                 className={cn(
                                     "flex-1 py-2 text-base font-medium rounded-md transition-all",
-                                    tab === "external"
+                                    tab === "login"
                                         ? "bg-primary text-primary-foreground shadow"
                                         : "bg-muted text-muted-foreground hover:bg-accent"
                                 )}
                                 onClick={() => {
-                                    setTab("external");
+                                    setTab("login");
                                     if (tab === "reset") resetPasswordState();
-                                    if (tab === "login" || tab === "signup") clearFormFields();
+                                    if (tab === "signup") clearFormFields();
                                 }}
-                                aria-selected={tab === "external"}
-                                disabled={oidcLoading}
+                                aria-selected={tab === "login"}
+                                disabled={loading || firstUser}
                             >
-                                {t('auth.external')}
+                                {t('common.login')}
                             </button>
-                        )}
-                    </div>
-                    <div className="mb-6 text-center">
-                        <h2 className="text-xl font-bold mb-1">
-                            {tab === "login" ? t('auth.loginTitle') :
-                                tab === "signup" ? t('auth.registerTitle') :
-                                    tab === "external" ? t('auth.loginWithExternal') :
-                                        t('auth.forgotPassword')}
-                        </h2>
-                    </div>
-
-                    {tab === "external" || tab === "reset" ? (
-                        <div className="flex flex-col gap-5">
-                            {tab === "external" && (
-                                <>
-                                    <div className="text-center text-muted-foreground mb-4">
-                                        <p>{t('auth.loginWithExternalDesc')}</p>
-                                    </div>
-                                    <Button
-                                        type="button"
-                                        className="w-full h-11 mt-2 text-base font-semibold"
-                                        disabled={oidcLoading}
-                                        onClick={handleOIDCLogin}
-                                    >
-                                        {oidcLoading ? Spinner : t('auth.loginWithExternal')}
-                                    </Button>
-                                </>
-                            )}
-                            {tab === "reset" && (
-                                <>
-                                    {resetStep === "initiate" && (
-                                        <>
-                                            <div className="text-center text-muted-foreground mb-4">
-                                                <p>{t('auth.resetCodeDesc')}</p>
-                                            </div>
-                                            <div className="flex flex-col gap-4">
-                                                <div className="flex flex-col gap-2">
-                                                    <Label htmlFor="reset-username">{t('common.username')}</Label>
-                                                    <Input
-                                                        id="reset-username"
-                                                        type="text"
-                                                        required
-                                                        className="h-11 text-base"
-                                                        value={localUsername}
-                                                        onChange={e => setLocalUsername(e.target.value)}
-                                                        disabled={resetLoading}
-                                                    />
-                                                </div>
-                                                <Button
-                                                    type="button"
-                                                    className="w-full h-11 text-base font-semibold"
-                                                    disabled={resetLoading || !localUsername.trim()}
-                                                    onClick={handleInitiatePasswordReset}
-                                                >
-                                                    {resetLoading ? Spinner : t('auth.sendResetCode')}
-                                                </Button>
-                                            </div>
-                                        </>
+                            <button
+                                type="button"
+                                className={cn(
+                                    "flex-1 py-2 text-base font-medium rounded-md transition-all",
+                                    tab === "signup"
+                                        ? "bg-primary text-primary-foreground shadow"
+                                        : "bg-muted text-muted-foreground hover:bg-accent"
+                                )}
+                                onClick={() => {
+                                    setTab("signup");
+                                    if (tab === "reset") resetPasswordState();
+                                    if (tab === "login") clearFormFields();
+                                }}
+                                aria-selected={tab === "signup"}
+                                disabled={loading || !registrationAllowed}
+                            >
+                                {t('common.register')}
+                            </button>
+                            {oidcConfigured && (
+                                <button
+                                    type="button"
+                                    className={cn(
+                                        "flex-1 py-2 text-base font-medium rounded-md transition-all",
+                                        tab === "external"
+                                            ? "bg-primary text-primary-foreground shadow"
+                                            : "bg-muted text-muted-foreground hover:bg-accent"
                                     )}
-
-                                    {resetStep === "verify" && (
-                                        <>o
-                                            <div className="text-center text-muted-foreground mb-4">
-                                                <p>{t('auth.enterResetCode')} <strong>{localUsername}</strong></p>
-                                            </div>
-                                            <div className="flex flex-col gap-4">
-                                                <div className="flex flex-col gap-2">
-                                                    <Label htmlFor="reset-code">{t('auth.resetCode')}</Label>
-                                                    <Input
-                                                        id="reset-code"
-                                                        type="text"
-                                                        required
-                                                        maxLength={6}
-                                                        className="h-11 text-base text-center text-lg tracking-widest"
-                                                        value={resetCode}
-                                                        onChange={e => setResetCode(e.target.value.replace(/\D/g, ''))}
-                                                        disabled={resetLoading}
-                                                        placeholder="000000"
-                                                    />
-                                                </div>
-                                                <Button
-                                                    type="button"
-                                                    className="w-full h-11 text-base font-semibold"
-                                                    disabled={resetLoading || resetCode.length !== 6}
-                                                    onClick={handleVerifyResetCode}
-                                                >
-                                                    {resetLoading ? Spinner : t('auth.verifyCodeButton')}
-                                                </Button>
-                                                <Button
-                                                    type="button"
-                                                    variant="outline"
-                                                    className="w-full h-11 text-base font-semibold"
-                                                    disabled={resetLoading}
-                                                    onClick={() => {
-                                                        setResetStep("initiate");
-                                                        setResetCode("");
-                                                    }}
-                                                >
-                                                    {t('common.back')}
-                                                </Button>
-                                            </div>
-                                        </>
-                                    )}
-
-                                    {resetSuccess && (
-                                        <>
-                                            <Alert className="mb-4">
-                                                <AlertTitle>{t('auth.passwordResetSuccess')}</AlertTitle>
-                                                <AlertDescription>
-                                                    {t('auth.passwordResetSuccessDesc')}
-                                                </AlertDescription>
-                                            </Alert>
-                                            <Button
-                                                type="button"
-                                                className="w-full h-11 text-base font-semibold"
-                                                onClick={() => {
-                                                    setTab("login");
-                                                    resetPasswordState();
-                                                }}
-                                            >
-                                                {t('auth.goToLogin')}
-                                            </Button>
-                                        </>
-                                    )}
-
-                                    {resetStep === "newPassword" && !resetSuccess && (
-                                        <>
-                                            <div className="text-center text-muted-foreground mb-4">
-                                                <p>{t('auth.enterNewPassword')} <strong>{localUsername}</strong></p>
-                                            </div>
-                                            <div className="flex flex-col gap-5">
-                                                <div className="flex flex-col gap-2">
-                                                    <Label htmlFor="new-password">{t('auth.newPassword')}</Label>
-                                                    <Input
-                                                        id="new-password"
-                                                        type="password"
-                                                        required
-                                                        className="h-11 text-base focus:ring-2 focus:ring-primary/50 transition-all duration-200"
-                                                        value={newPassword}
-                                                        onChange={e => setNewPassword(e.target.value)}
-                                                        disabled={resetLoading}
-                                                        autoComplete="new-password"
-                                                    />
-                                                </div>
-                                                <div className="flex flex-col gap-2">
-                                                    <Label htmlFor="confirm-password">{t('auth.confirmNewPassword')}</Label>
-                                                    <Input
-                                                        id="confirm-password"
-                                                        type="password"
-                                                        required
-                                                        className="h-11 text-base focus:ring-2 focus:ring-primary/50 transition-all duration-200"
-                                                        value={confirmPassword}
-                                                        onChange={e => setConfirmPassword(e.target.value)}
-                                                        disabled={resetLoading}
-                                                        autoComplete="new-password"
-                                                    />
-                                                </div>
-                                                <Button
-                                                    type="button"
-                                                    className="w-full h-11 text-base font-semibold"
-                                                    disabled={resetLoading || !newPassword || !confirmPassword}
-                                                    onClick={handleCompletePasswordReset}
-                                                >
-                                                    {resetLoading ? Spinner : t('auth.resetPasswordButton')}
-                                                </Button>
-                                                <Button
-                                                    type="button"
-                                                    variant="outline"
-                                                    className="w-full h-11 text-base font-semibold"
-                                                    disabled={resetLoading}
-                                                    onClick={() => {
-                                                        setResetStep("verify");
-                                                        setNewPassword("");
-                                                        setConfirmPassword("");
-                                                    }}
-                                                >
-                                                    {t('common.back')}
-                                                </Button>
-                                            </div>
-                                        </>
-                                    )}
-                                </>
+                                    onClick={() => {
+                                        setTab("external");
+                                        if (tab === "reset") resetPasswordState();
+                                        if (tab === "login" || tab === "signup") clearFormFields();
+                                    }}
+                                    aria-selected={tab === "external"}
+                                    disabled={oidcLoading}
+                                >
+                                    {t('auth.external')}
+                                </button>
                             )}
                         </div>
-                    ) : (
-                        <form className="flex flex-col gap-5" onSubmit={handleSubmit}>
-                            <div className="flex flex-col gap-2">
-                                <Label htmlFor="username">{t('common.username')}</Label>
-                                <Input
-                                    id="username"
-                                    type="text"
-                                    required
-                                    className="h-11 text-base"
-                                    value={localUsername}
-                                    onChange={e => setLocalUsername(e.target.value)}
-                                    disabled={loading || internalLoggedIn}
-                                />
+                        <div className="mb-6 text-center">
+                            <h2 className="text-xl font-bold mb-1">
+                                {tab === "login" ? t('auth.loginTitle') :
+                                    tab === "signup" ? t('auth.registerTitle') :
+                                        tab === "external" ? t('auth.loginWithExternal') :
+                                            t('auth.forgotPassword')}
+                            </h2>
+                        </div>
+
+                        {tab === "external" || tab === "reset" ? (
+                            <div className="flex flex-col gap-5">
+                                {tab === "external" && (
+                                    <>
+                                        <div className="text-center text-muted-foreground mb-4">
+                                            <p>{t('auth.loginWithExternalDesc')}</p>
+                                        </div>
+                                        <Button
+                                            type="button"
+                                            className="w-full h-11 mt-2 text-base font-semibold"
+                                            disabled={oidcLoading}
+                                            onClick={handleOIDCLogin}
+                                        >
+                                            {oidcLoading ? Spinner : t('auth.loginWithExternal')}
+                                        </Button>
+                                    </>
+                                )}
+                                {tab === "reset" && (
+                                    <>
+                                        {resetStep === "initiate" && (
+                                            <>
+                                                <div className="text-center text-muted-foreground mb-4">
+                                                    <p>{t('auth.resetCodeDesc')}</p>
+                                                </div>
+                                                <div className="flex flex-col gap-4">
+                                                    <div className="flex flex-col gap-2">
+                                                        <Label htmlFor="reset-username">{t('common.username')}</Label>
+                                                        <Input
+                                                            id="reset-username"
+                                                            type="text"
+                                                            required
+                                                            className="h-11 text-base"
+                                                            value={localUsername}
+                                                            onChange={e => setLocalUsername(e.target.value)}
+                                                            disabled={resetLoading}
+                                                        />
+                                                    </div>
+                                                    <Button
+                                                        type="button"
+                                                        className="w-full h-11 text-base font-semibold"
+                                                        disabled={resetLoading || !localUsername.trim()}
+                                                        onClick={handleInitiatePasswordReset}
+                                                    >
+                                                        {resetLoading ? Spinner : t('auth.sendResetCode')}
+                                                    </Button>
+                                                </div>
+                                            </>
+                                        )}
+
+                                        {resetStep === "verify" && (
+                                            <>
+                                                <div className="text-center text-muted-foreground mb-4">
+                                                    <p>{t('auth.enterResetCode')} <strong>{localUsername}</strong></p>
+                                                </div>
+                                                <div className="flex flex-col gap-4">
+                                                    <div className="flex flex-col gap-2">
+                                                        <Label htmlFor="reset-code">{t('auth.resetCode')}</Label>
+                                                        <Input
+                                                            id="reset-code"
+                                                            type="text"
+                                                            required
+                                                            maxLength={6}
+                                                            className="h-11 text-base text-center text-lg tracking-widest"
+                                                            value={resetCode}
+                                                            onChange={e => setResetCode(e.target.value.replace(/\D/g, ''))}
+                                                            disabled={resetLoading}
+                                                            placeholder="000000"
+                                                        />
+                                                    </div>
+                                                    <Button
+                                                        type="button"
+                                                        className="w-full h-11 text-base font-semibold"
+                                                        disabled={resetLoading || resetCode.length !== 6}
+                                                        onClick={handleVerifyResetCode}
+                                                    >
+                                                        {resetLoading ? Spinner : t('auth.verifyCodeButton')}
+                                                    </Button>
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        className="w-full h-11 text-base font-semibold"
+                                                        disabled={resetLoading}
+                                                        onClick={() => {
+                                                            setResetStep("initiate");
+                                                            setResetCode("");
+                                                        }}
+                                                    >
+                                                        {t('common.back')}
+                                                    </Button>
+                                                </div>
+                                            </>
+                                        )}
+
+                                        {resetSuccess && (
+                                            <>
+                                                <Alert className="mb-4">
+                                                    <AlertTitle>{t('auth.passwordResetSuccess')}</AlertTitle>
+                                                    <AlertDescription>
+                                                        {t('auth.passwordResetSuccessDesc')}
+                                                    </AlertDescription>
+                                                </Alert>
+                                                <Button
+                                                    type="button"
+                                                    className="w-full h-11 text-base font-semibold"
+                                                    onClick={() => {
+                                                        setTab("login");
+                                                        resetPasswordState();
+                                                    }}
+                                                >
+                                                    {t('auth.goToLogin')}
+                                                </Button>
+                                            </>
+                                        )}
+
+                                        {resetStep === "newPassword" && !resetSuccess && (
+                                            <>
+                                                <div className="text-center text-muted-foreground mb-4">
+                                                    <p>{t('auth.enterNewPassword')} <strong>{localUsername}</strong></p>
+                                                </div>
+                                                <div className="flex flex-col gap-5">
+                                                    <div className="flex flex-col gap-2">
+                                                        <Label htmlFor="new-password">{t('auth.newPassword')}</Label>
+                                                        <Input
+                                                            id="new-password"
+                                                            type="password"
+                                                            required
+                                                            className="h-11 text-base focus:ring-2 focus:ring-primary/50 transition-all duration-200"
+                                                            value={newPassword}
+                                                            onChange={e => setNewPassword(e.target.value)}
+                                                            disabled={resetLoading}
+                                                            autoComplete="new-password"
+                                                        />
+                                                    </div>
+                                                    <div className="flex flex-col gap-2">
+                                                        <Label htmlFor="confirm-password">{t('auth.confirmNewPassword')}</Label>
+                                                        <Input
+                                                            id="confirm-password"
+                                                            type="password"
+                                                            required
+                                                            className="h-11 text-base focus:ring-2 focus:ring-primary/50 transition-all duration-200"
+                                                            value={confirmPassword}
+                                                            onChange={e => setConfirmPassword(e.target.value)}
+                                                            disabled={resetLoading}
+                                                            autoComplete="new-password"
+                                                        />
+                                                    </div>
+                                                    <Button
+                                                        type="button"
+                                                        className="w-full h-11 text-base font-semibold"
+                                                        disabled={resetLoading || !newPassword || !confirmPassword}
+                                                        onClick={handleCompletePasswordReset}
+                                                    >
+                                                        {resetLoading ? Spinner : t('auth.resetPasswordButton')}
+                                                    </Button>
+                                                    <Button
+                                                        type="button"
+                                                        variant="outline"
+                                                        className="w-full h-11 text-base font-semibold"
+                                                        disabled={resetLoading}
+                                                        onClick={() => {
+                                                            setResetStep("verify");
+                                                            setNewPassword("");
+                                                            setConfirmPassword("");
+                                                        }}
+                                                    >
+                                                        {t('common.back')}
+                                                    </Button>
+                                                </div>
+                                            </>
+                                        )}
+                                    </>
+                                )}
                             </div>
-                            <div className="flex flex-col gap-2">
-                                <Label htmlFor="password">{t('common.password')}</Label>
-                                <Input id="password" type="password" required className="h-11 text-base"
-                                       value={password} onChange={e => setPassword(e.target.value)}
-                                       disabled={loading || internalLoggedIn}/>
-                            </div>
-                            {tab === "signup" && (
+                        ) : (
+                            <form className="flex flex-col gap-5" onSubmit={handleSubmit}>
                                 <div className="flex flex-col gap-2">
-                                    <Label htmlFor="signup-confirm-password">{t('common.confirmPassword')}</Label>
-                                    <Input id="signup-confirm-password" type="password" required
-                                           className="h-11 text-base"
-                                           value={signupConfirmPassword}
-                                           onChange={e => setSignupConfirmPassword(e.target.value)}
+                                    <Label htmlFor="username">{t('common.username')}</Label>
+                                    <Input
+                                        id="username"
+                                        type="text"
+                                        required
+                                        className="h-11 text-base"
+                                        value={localUsername}
+                                        onChange={e => setLocalUsername(e.target.value)}
+                                        disabled={loading || internalLoggedIn}
+                                    />
+                                </div>
+                                <div className="flex flex-col gap-2">
+                                    <Label htmlFor="password">{t('common.password')}</Label>
+                                    <Input id="password" type="password" required className="h-11 text-base"
+                                           value={password} onChange={e => setPassword(e.target.value)}
                                            disabled={loading || internalLoggedIn}/>
                                 </div>
-                            )}
-                            <Button type="submit" className="w-full h-11 mt-2 text-base font-semibold"
-                                    disabled={loading || internalLoggedIn}>
-                                {loading ? Spinner : (tab === "login" ? t('common.login') : t('auth.signUp'))}
-                            </Button>
-                            {tab === "login" && (
-                                <Button type="button" variant="outline"
-                                        className="w-full h-11 text-base font-semibold"
-                                        disabled={loading || internalLoggedIn}
+                                {tab === "signup" && (
+                                    <div className="flex flex-col gap-2">
+                                        <Label htmlFor="confirm-password">{t('auth.confirmPassword')}</Label>
+                                        <Input id="confirm-password" type="password" required className="h-11 text-base"
+                                               value={signupConfirmPassword}
+                                               onChange={e => setSignupConfirmPassword(e.target.value)}
+                                               disabled={loading || internalLoggedIn}/>
+                                    </div>
+                                )}
+                                <Button type="submit" className="w-full h-11 mt-2 text-base font-semibold"
+                                        disabled={loading || internalLoggedIn}>
+                                    {loading ? Spinner : (tab === "login" ? t('common.login') : t('common.register'))}
+                                </Button>
+                                {tab === "login" && (
+                                    <Button
+                                        type="button"
+                                        variant="link"
+                                        className="text-sm text-muted-foreground hover:text-primary"
                                         onClick={() => {
                                             setTab("reset");
-                                            resetPasswordState();
                                             clearFormFields();
                                         }}
-                                >
-                                    {t('auth.resetPasswordButton')}
-                                </Button>
-                            )}
-                        </form>
-                    )}
-                    
-                    <div className="mt-6 pt-4 border-t border-[#303032]">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <Label className="text-sm text-muted-foreground">{t('common.language')}</Label>
-                            </div>
-                            <LanguageSwitcher />
-                        </div>
-                    </div>
-                </>
-            )}
-            {error && (
-                <Alert variant="destructive" className="mt-4">
-                    <AlertTitle>Error</AlertTitle>
-                    <AlertDescription>{error}</AlertDescription>
-                </Alert>
+                                        disabled={loading}
+                                    >
+                                        {t('auth.forgotPassword')}
+                                    </Button>
+                                )}
+                            </form>
+                        )}
+                    </>
+                )}
+            </div>
+            
+            {/* 新增footer显示区域 */}
+            {footerContent && (
+                <div 
+                    className="mt-6 w-[420px] max-w-full text-center text-sm text-muted-foreground"
+                    dangerouslySetInnerHTML={{ __html: footerContent }}
+                />
             )}
         </div>
     );
 }
+
