@@ -90,6 +90,7 @@ COPY .env ./.env
 RUN chown -R node:node /app
 
 VOLUME ["/app/data"]
+VOLUME ["/usr/share/nginx/html/footer.html"]
 
 EXPOSE ${PORT} 8081 8082 8083 8084 8085
 
