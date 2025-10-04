@@ -97,6 +97,10 @@ export function HomepageAuth({
   const [totpTempToken, setTotpTempToken] = useState("");
   const [totpLoading, setTotpLoading] = useState(false);
 
+  // 新增状态用于存储footer内容
+  const [footerContent, setFooterContent] = useState<string>("");
+
+
   useEffect(() => {
     setInternalLoggedIn(loggedIn);
   }, [loggedIn]);
@@ -165,6 +169,23 @@ export function HomepageAuth({
       toast.warning(t("messages.registrationDisabled"));
     }
   }, [registrationAllowed, internalLoggedIn, t]);
+
+  // 新增useEffect用于加载footer内容
+  useEffect(() => {
+      const loadFooterContent = async () => {
+          try {
+              const response = await fetch('/footer.html');
+              if (response.ok) {
+                  const content = await response.text();
+                  setFooterContent(content);
+              }
+          } catch (error) {
+                // 如果footer.html不存在或无法加载，不显示错误，只是不显示footer
+              console.log('Footer.html not found or could not be loaded');
+          }
+      };
+      loadFooterContent();
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -1076,6 +1097,10 @@ export function HomepageAuth({
             )}
           </div>
         </>
+      )}
+      {/* 新增footer显示区域 */}
+      {footerContent && (
+        <div className="mt-6 w-[420px] max-w-full text-center text-sm text-muted-foreground" dangerouslySetInnerHTML={{ __html: footerContent }} />
       )}
     </div>
   );

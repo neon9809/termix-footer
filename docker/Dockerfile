@@ -81,6 +81,7 @@ COPY --chown=node:node --from=backend-builder /app/dist/backend ./dist/backend
 COPY --chown=node:node package.json ./
 
 VOLUME ["/app/data"]
+VOLUME ["/usr/share/nginx/html/footer.html"]
 
 EXPOSE ${PORT} 30001 30002 30003 30004 30005
 
